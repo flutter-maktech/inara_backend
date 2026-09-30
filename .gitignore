@@ -1,0 +1,55 @@
+# ============================================================
+# .gitignore — Inara Backend
+# ============================================================
+
+# ── Secrets (NEVER commit) ────────────────────────────────
+.env
+.env.*
+!.env.example
+_env
+*.key
+*.pem
+
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# ── Virtual environments ──────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Prisma generated client ───────────────────────────────
+# The schema and migrations are committed; generated client is not
+.prisma/
+
+# ── Testing ───────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ── IDE ───────────────────────────────────────────────────
+.idea/
+*.swp
+*.swo
+
+# ── OS ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Logs ──────────────────────────────────────────────────
+*.log
+logs/
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
