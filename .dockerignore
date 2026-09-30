@@ -1,0 +1,60 @@
+# ============================================================
+# .dockerignore — Inara Backend
+# Keeps build context lean, fast, and free of secrets
+# ============================================================
+
+# ── Secrets (CRITICAL — never ship these into an image) ──
+.env
+.env.*
+!.env.example
+_env
+*.key
+*.pem
+
+# ── Python artifacts ─────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ──────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Testing ───────────────────────────────────────────────
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ── IDE ───────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Git ───────────────────────────────────────────────────
+.git/
+.gitignore
+.gitattributes
+
+# ── Docker files themselves ───────────────────────────────
+docker-compose*.yml
+.dockerignore
+
+# ── Docs / CI ─────────────────────────────────────────────
+README.md
+*.md
+.github/
+docs/
+
+# ── OS ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

@@ -1,0 +1,845 @@
+generator client {
+  provider             = "prisma-client-py"
+  recursive_type_depth = 5
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  ADMIN
+  INSTRUCTOR
+  MANAGER
+  USER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  PAUSED
+}
+
+enum ClassStatus {
+  SCHEDULED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum CourseStatus {
+  SCHEDULED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  ATTENDED
+  MISSED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  PICKEDUP
+  FAILED
+  REFUNDED
+  CANCELLED
+  COMPLETED
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  DEBIT_CARD
+  APPLE_PAY
+  GOOGLE_PAY
+  WALLET
+  GATEWAY
+}
+
+enum PackageType {
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+  LIFETIME
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+  REMINDER
+}
+
+enum ProductStatus {
+  AVAILABLE
+  OUT_OF_STOCK
+  DISCONTINUED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  CANCELLED
+}
+
+enum VisibilityStatus {
+  VISIBLE
+  HIDDEN
+}
+
+enum LegalDocType {
+  PRIVACY_POLICY
+  TERMS_CONDITIONS
+  FAQ
+}
+
+// Payment-specific enums
+enum PaymentStatus {
+  INITIATED
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum PaymentModule {
+  WALLET
+  BOOKING
+  MEMBERSHIP
+  PACKAGE
+  ORDER
+}
+
+enum WalletTransactionType {
+  DEPOSIT
+  DEBIT
+}
+
+// ============================================
+// USER MANAGEMENT
+// ============================================
+
+model User {
+  id                      String    @id @default(cuid())
+  email                   String    @unique
+  passwordHash            String    @map("password_hash")
+  name                    String    @map("name")
+  phone                   String?
+  gender                  String?
+  role                    UserRole  @default(USER)
+  avatar                  String?
+  speciality              String?
+  bio                     String?
+
+  // Date of Birth — stores only day (1–31) and month (1–12).
+  // The year is intentionally omitted for privacy.
+  // Format: "DD-MM" e.g. "25-12" for 25th December.
+  dateOfBirth             String?   @map("date_of_birth")
+
+  address                 String?
+
+  // Email Verification
+  isActive                     Boolean   @default(true)  @map("is_active")
+  isVerified                   Boolean   @default(false) @map("is_verified")
+  verificationToken            String?   @unique @map("verification_token")
+  verificationTokenExpiry      DateTime? @map("verification_token_expiry")
+  appNotificationsEnabled      Boolean @default(true) @map("app_notifications_enabled")
+  whatsappNotificationsEnabled Boolean @default(true) @map("whatsapp_notifications_enabled")
+
+  // Password Reset
+  resetToken              String?   @unique @map("reset_token")
+  resetTokenExpiry        DateTime? @map("reset_token_expiry")
+
+  // OAuth2
+  provider                String?
+  providerId              String?   @map("provider_id")
+
+  // Metadata
+  lastLoginAt             DateTime? @map("last_login_at")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt      @map("updated_at")
+
+  // Relations
+  memberships             Membership[]
+  createdCourses          Course[]            @relation("CourseInstructor")
+  instructorClasses       Classes[]           @relation("ClassInstructor")
+  notifications           Notification[]
+  bookings                Booking[]
+  orders                  Order[]
+  wishlists               Wishlist[]
+  cartItems               CartItem[]
+  reviews                 Review[]
+  invitationsSent         Invitation[]        @relation("InvitedBy")
+  memberInvitationsSent   MemberInvitation[]  @relation("MemberInvitedBy")
+
+  // Payment relations
+  wallet                  Wallet?
+  paymentLogs             PaymentLog[]
+
+  @@unique([provider, providerId])
+  @@map("users")
+}
+
+// ============================================
+// COURSE MANAGEMENT
+// ============================================
+
+model Course {
+  id                 String       @id @default(cuid())
+  title              String
+  description        String
+  status             CourseStatus @default(SCHEDULED)
+
+  // Classification
+  difficulty         String
+  gender             String
+
+  // Pricing
+  price              Float        @default(0)
+  isFree             Boolean?     @default(false) @map("is_free")
+
+  // Scheduling
+  duration           String
+  scheduledAt        DateTime     @map("scheduled_at")
+  endDate            DateTime?    @map("end_date")
+  maxParticipants    Int          @map("max_participants")
+  availableSeat      Int?         @default(0)
+
+  // Physical Location
+  location           String
+  locationMapLink    String?      @map("location_map_link")
+  latitude           Float?       @map("latitude")
+  longitude          Float?       @map("longitude")
+  phone              String
+
+  // Media
+  imageUrl           String       @map("image_url")
+
+  // Cancellation
+  cancelledAt        DateTime?    @map("cancelled_at")
+  cancellationReason String?      @map("cancellation_reason")
+
+  // Ordering
+  order              Int          @default(0)
+
+  // Relations
+  instructorId       String       @map("instructor_id")
+  instructor         User         @relation("CourseInstructor", fields: [instructorId], references: [id])
+  bookings           Booking[]
+  wishlists          Wishlist[]
+  reviews            Review[]
+
+  // Metadata
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt      @map("updated_at")
+
+  @@map("courses")
+}
+
+// ============================================
+// CLASS MANAGEMENT
+// ============================================
+
+model Classes {
+  id                 String      @id @default(cuid())
+  title              String
+  description        String?
+  status             ClassStatus @default(SCHEDULED)
+
+  // Classification
+  difficulty         String
+  gender             String
+
+  // Pricing
+  price              Float       @default(0)
+  isFree             Boolean?    @default(false) @map("is_free")
+
+  // Scheduling
+  duration           String
+  scheduledAt        DateTime    @map("scheduled_at")
+  maxParticipants    Int         @map("max_participants")
+  availableSeat      Int?        @default(0)
+
+  // Physical Location
+  location           String
+  locationMapLink    String?     @map("location_map_link")
+  latitude           Float?      @map("latitude")
+  longitude          Float?      @map("longitude")
+  phone              String
+
+  // Media
+  imageUrl           String      @map("image_url")
+
+  // Cancellation
+  cancelledAt        DateTime?   @map("cancelled_at")
+  cancellationReason String?     @map("cancellation_reason")
+
+  // Ordering
+  order              Int         @default(0)
+
+  // Relations
+  instructorId       String      @map("instructor_id")
+  instructor         User        @relation("ClassInstructor", fields: [instructorId], references: [id])
+  bookings           Booking[]
+  wishlists          Wishlist[]
+  reviews            Review[]
+
+  // Metadata
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt      @map("updated_at")
+
+  @@map("classes")
+}
+
+// ============================================
+// BOOKING MANAGEMENT
+//
+// Polymorphic — a booking belongs to EITHER a Class OR a Course.
+// Exactly one of classId / courseId is set per row; the other is NULL.
+// Booking type is inferred from which FK is non-null — no type enum required.
+// ============================================
+
+model Booking {
+  id          String        @id @default(cuid())
+  userId      String        @map("user_id")
+
+  // Exactly one of these is populated per booking row
+  classId     String?       @map("class_id")
+  courseId    String?       @map("course_id")
+
+  status      BookingStatus @default(PENDING)
+  bookedAt    DateTime      @default(now()) @map("booked_at")
+  cancelledAt DateTime?     @map("cancelled_at")
+  notes       String?
+
+  // Payment tracking
+  paymentMethod PaymentMethod? @map("payment_method")
+  amountPaid    Float?         @map("amount_paid")
+  paymentLogId  String?        @map("payment_log_id")
+
+  // Relations — both are optional because a class booking has no courseId and vice-versa
+  user        User          @relation(fields: [userId],   references: [id])
+  classes     Classes?      @relation(fields: [classId],  references: [id])
+  course      Course?       @relation(fields: [courseId], references: [id])
+
+  // Prevent duplicate bookings: one per user per class, one per user per course
+  @@unique([userId, classId])
+  @@unique([userId, courseId])
+  @@map("bookings")
+}
+
+// ============================================
+// PACKAGE MODEL
+// ============================================
+
+model Package {
+  id              String   @id @default(cuid())
+
+  name            String
+  description     String?
+
+  // Pricing
+  price           Float
+  discountPrice   Float?   @map("discount_price")
+
+  // Duration
+  durationDays    Int      @map("duration_days")
+
+  // Access control — stored as arrays of IDs
+  allowedClasses  String[] @map("allowed_classes")
+  allowedCourses  String[] @map("allowed_courses")
+
+  timeRestriction String?  @map("time_restriction")
+
+  // Settings
+  isActive        Boolean  @default(true)  @map("is_active")
+  autoRenew       Boolean  @default(false) @map("auto_renew")
+  order           Int      @default(0)
+
+  // Metadata
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt      @map("updated_at")
+
+  @@map("packages")
+}
+
+// ============================================
+// MEMBERSHIP MODEL
+// ============================================
+
+model Membership {
+  id              String           @id @default(cuid())
+  userId          String           @map("user_id")
+
+  name            String
+  description     String?
+  price           Float
+
+  // Duration
+  durationDays    Int              @map("duration_days")
+
+  // Access control — stored as arrays of IDs
+  allowedClasses  String[]         @map("allowed_classes")
+  allowedCourses  String[]         @map("allowed_courses")
+
+  timeRestriction String?          @map("time_restriction")
+
+  // Status & Progress
+  status          MembershipStatus @default(ACTIVE)
+  progress        Float            @default(0)
+
+  // Dates
+  startDate       DateTime         @default(now()) @map("start_date")
+  endDate         DateTime?        @map("end_date")
+  enrolledAt      DateTime         @default(now()) @map("enrolled_at")
+  completedAt     DateTime?        @map("completed_at")
+  cancelledAt     DateTime?        @map("cancelled_at")
+
+  // Settings
+  autoRenew       Boolean          @default(false) @map("auto_renew")
+
+  // Payment tracking
+  paymentMethod   PaymentMethod?   @map("payment_method")
+  paymentLogId    String?          @map("payment_log_id")
+  isPaid          Boolean          @default(false) @map("is_paid")
+
+  // Relations
+  user            User             @relation(fields: [userId], references: [id])
+
+  // Metadata
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt      @map("updated_at")
+
+  @@map("memberships")
+}
+
+// ============================================
+// STORE & PRODUCT MANAGEMENT
+// ============================================
+
+model Product {
+  id               String        @id @default(cuid())
+  name             String
+  slug             String?       @unique
+  description      String?
+  shortDescription String?       @map("short_description")
+
+  material         String?
+  dimensions       String?
+  weight           Float?
+  color            String?
+  size             String?
+
+  price            Float
+  discountPrice    Float?        @map("discount_price")
+  sku              String?       @unique
+  stockQuantity    Int           @default(0) @map("stock_quantity")
+  status           ProductStatus @default(AVAILABLE)
+
+  images           String[]
+  thumbnail        String?
+
+  categoryId       String?       @map("category_id")
+  tags             String[]
+
+  isFeatured       Boolean       @default(false) @map("is_featured")
+  viewCount        Int           @default(0)     @map("view_count")
+  salesCount       Int           @default(0)     @map("sales_count")
+  averageRating    Float?        @map("average_rating")
+  totalReviews     Int           @default(0)     @map("total_reviews")
+
+  // Pickup note
+  pickupNote       String?       @map("pickup_note")
+
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt      @map("updated_at")
+
+  orderItems       OrderItem[]
+  cartItems        CartItem[]
+  reviews          Review[]
+
+  @@map("products")
+}
+
+// ============================================
+// SHOPPING CART
+// ============================================
+
+model CartItem {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  productId String   @map("product_id")
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  user      User     @relation(fields: [userId],    references: [id])
+  product   Product  @relation(fields: [productId], references: [id])
+
+  @@unique([userId, productId])
+  @@map("cart_items")
+}
+
+// ============================================
+// ORDER & PAYMENT MANAGEMENT
+// Order lifecycle: PENDING → PAID → PROCESSING → PICKEDUP
+// No shipping. Pickup only.
+// ============================================
+
+model Order {
+  id              String        @id @default(cuid())
+  orderNumber     String        @unique @map("order_number")
+  userId          String        @map("user_id")
+
+  orderType       String        @map("order_type")
+  packageId       String?       @map("package_id")
+
+  subtotal        Float
+  discount        Float         @default(0)
+  tax             Float         @default(0)
+  total           Float
+
+  status          OrderStatus   @default(PENDING)
+  paymentMethod   PaymentMethod @map("payment_method")
+  transactionId   String?       @map("transaction_id")
+  couponCode      String?       @map("coupon_code")
+  paidAt          DateTime?     @map("paid_at")
+
+  refundedAt      DateTime?     @map("refunded_at")
+  refundAmount    Float?        @map("refund_amount")
+
+  // Pickup info
+  pickupNote      String?       @map("pickup_note")
+
+  notes           String?
+
+  // Payment tracking
+  paymentLogId    String?       @map("payment_log_id")
+
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt      @map("updated_at")
+
+  user            User          @relation(fields: [userId], references: [id])
+  items           OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String   @map("order_id")
+  productId String   @map("product_id")
+  quantity  Int
+  price     Float
+  total     Float
+  createdAt DateTime @default(now()) @map("created_at")
+
+  order     Order    @relation(fields: [orderId],   references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+// ============================================
+// WALLET SYSTEM
+// Each user has one wallet. Balance is always >= 0.
+// ============================================
+
+model Wallet {
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  balance   Float    @default(0)
+  currency  String   @default("QAR")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  user         User              @relation(fields: [userId], references: [id])
+  transactions WalletTransaction[]
+
+  @@map("wallets")
+}
+
+model WalletTransaction {
+  id            String               @id @default(cuid())
+  walletId      String               @map("wallet_id")
+  type          WalletTransactionType
+  amount        Float
+  balanceBefore Float                @map("balance_before")
+  balanceAfter  Float                @map("balance_after")
+  description   String?
+  referenceId   String?              @map("reference_id")   // booking/order/membership id
+  paymentLogId  String?              @map("payment_log_id")
+  createdAt     DateTime             @default(now()) @map("created_at")
+
+  wallet        Wallet               @relation(fields: [walletId], references: [id])
+
+  @@map("wallet_transactions")
+}
+
+// ============================================
+// PAYMENT LOG
+// Central audit trail for every payment event across all modules.
+// ============================================
+
+model PaymentLog {
+  id               String        @id @default(cuid())
+  userId           String        @map("user_id")
+
+  module           PaymentModule
+  // Prefixed reference: WALLET-xxx, BOOKING-xxx, MEMBERSHIP-xxx, PACKAGE-xxx, ORDER-xxx
+  referenceId      String        @map("reference_id")
+  idempotencyKey   String        @unique @map("idempotency_key")
+
+  amount           Float
+  currency         String        @default("QAR")
+  paymentMethod    PaymentMethod @map("payment_method")
+  status           PaymentStatus @default(INITIATED)
+
+  // MyFatoorah specific
+  gatewayInvoiceId  String?      @map("gateway_invoice_id")
+  gatewayPaymentId  String?      @map("gateway_payment_id")
+  gatewaySessionId  String?      @map("gateway_session_id")
+  gatewayResponse   Json?        @map("gateway_response")
+
+  // Refund tracking
+  refundAmount      Float?       @map("refund_amount")
+  refundedAt        DateTime?    @map("refunded_at")
+
+  errorMessage      String?      @map("error_message")
+
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt      @map("updated_at")
+
+  user              User         @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([referenceId])
+  @@index([idempotencyKey])
+  @@index([module])
+  @@map("payment_logs")
+}
+
+// ============================================
+// NEWS MANAGEMENT
+// ============================================
+
+model News {
+  id               String    @id @default(cuid())
+  title            String
+  shortDescription String?   @map("short_description")
+  thumbnail        String?
+
+  // Duration & Expiry
+  durationDays     Int?      @map("duration_days")
+  expiresAt        DateTime? @map("expires_at")
+
+  publishedAt      DateTime  @default(now()) @map("published_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt      @map("updated_at")
+
+  @@map("news")
+}
+
+// ============================================
+// ABOUT US (Singleton — only one record)
+// ============================================
+
+model AboutUs {
+  id               String   @id @default(cuid())
+
+  activeMembers    Int      @default(0) @map("active_members")
+  totalClasses     Int      @default(0) @map("total_classes")
+  totalInstructors Int      @default(0) @map("total_instructors")
+
+  ourStory         String?  @map("our_story")   @db.Text
+  ourMission       String?  @map("our_mission") @db.Text
+
+  location         String?
+  locationMapLink  String?  @map("location_map_link")
+  latitude         Float?   @map("latitude")
+  longitude        Float?   @map("longitude")
+  email            String?
+  phoneNumber      String?  @map("phone_number")
+  instagramAccount String?  @map("instagram_account")
+  facebookPage     String?  @map("facebook_page")
+  websiteUrl       String?  @map("website_url")
+
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt      @map("updated_at")
+
+  @@map("about_us")
+}
+
+// ============================================
+// TEAM INVITATION (Admin/Manager/Instructor roles)
+// ============================================
+
+model Invitation {
+  id            String           @id @default(cuid())
+  email         String
+  role          UserRole
+  inviteToken   String           @unique @map("invite_token")
+  status        InvitationStatus @default(PENDING)
+
+  invitedBy     String  @map("invited_by")
+  invitedByUser User    @relation("InvitedBy", fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  expiresAt     DateTime  @map("expires_at")
+  acceptedAt    DateTime? @map("accepted_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt      @map("updated_at")
+
+  @@index([email])
+  @@index([inviteToken])
+  @@map("invitations")
+}
+
+// ============================================
+// MEMBER INVITATION (USER role — invited by Admin)
+// ============================================
+
+model MemberInvitation {
+  id            String           @id @default(cuid())
+  email         String
+  inviteToken   String           @unique @map("invite_token")
+  status        InvitationStatus @default(PENDING)
+
+  invitedBy     String           @map("invited_by")
+  invitedByUser User             @relation("MemberInvitedBy", fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  name          String?
+
+  expiresAt     DateTime  @map("expires_at")
+  acceptedAt    DateTime? @map("accepted_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt      @map("updated_at")
+
+  @@index([email])
+  @@index([inviteToken])
+  @@map("member_invitations")
+}
+
+model PermissionRule {
+  id          String           @id @default(cuid())
+  moduleName  String           @map("module_name")
+
+  adminAccess      VisibilityStatus @default(VISIBLE) @map("admin_access")
+  managerAccess    VisibilityStatus @default(VISIBLE) @map("manager_access")
+  instructorAccess VisibilityStatus @default(HIDDEN)  @map("instructor_access")
+
+  displayOrder Int      @default(0)     @map("display_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt      @map("updated_at")
+
+  @@unique([moduleName])
+  @@map("permission_rules")
+}
+
+// ============================================
+// REVIEWS & RATINGS
+// ============================================
+
+model Review {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+
+  courseId    String?  @map("course_id")
+  classId     String?  @map("class_id")
+  productId   String?  @map("product_id")
+
+  rating      Int
+  comment     String?
+  images      String[]
+  isPublished Boolean  @default(true) @map("is_published")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt      @map("updated_at")
+
+  user        User      @relation(fields: [userId],    references: [id])
+  course      Course?   @relation(fields: [courseId],  references: [id], onDelete: Cascade)
+  classes     Classes?  @relation(fields: [classId],   references: [id], onDelete: Cascade)
+  product     Product?  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("reviews")
+}
+
+// ============================================
+// WISHLIST
+// ============================================
+
+model Wishlist {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+
+  courseId  String?  @map("course_id")
+  classId   String?  @map("class_id")
+
+  addedAt   DateTime @default(now()) @map("added_at")
+
+  user      User     @relation(fields: [userId],   references: [id])
+  course    Course?  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  classes   Classes? @relation(fields: [classId],  references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@unique([userId, classId])
+  @@map("wishlists")
+}
+
+// ============================================
+// NOTIFICATION SYSTEM
+// ============================================
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String           @map("user_id")
+  title     String
+  message   String
+  type      NotificationType
+  actionUrl String?          @map("action_url")
+  isRead    Boolean          @default(false) @map("is_read")
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user      User             @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+model LegalDocument {
+  id        String       @id @default(cuid())
+  type      LegalDocType @unique
+  content   String       @db.Text
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@map("legal_documents")
+}
+
+// ============================================
+// AUTHENTICATION & OTP
+// ============================================
+
+model Otp {
+  id        String   @id @default(cuid())
+  email     String
+  code      String
+  type      String
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("otps")
+}
