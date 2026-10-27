@@ -92,6 +92,11 @@ class Settings(BaseSettings):
     SERVICE_KEY_ALLOWED_PATHS: str = ""            # optional semicolon-separated regex override of the default allowlist
     SERVICE_KEY_ALLOWED_IPS: str = ""              # optional comma-separated client IPs; empty = no IP restriction
     SERVICE_KEY_REDACT_PERSONAL_DATA: bool = True  # strip e-mail / phone / date-of-birth / address from key responses
+    # "website" key profile (public Inara Yoga website). Own budget and IP list so it never
+    # inherits the reporting client's limits. 30/min per worker ≈ 60/min across 2 workers,
+    # versus roughly 1–2 requests/min of expected traffic (6 endpoints, each ≤ once per 5 min).
+    SERVICE_KEY_WEBSITE_RATE_LIMIT_PER_MINUTE: int = 30
+    SERVICE_KEY_WEBSITE_ALLOWED_IPS: str = ""      # optional comma-separated website-server IPs; empty = no IP restriction
 
     # ── Server ────────────────────────────────────────
     BACKEND_PORT: int = 8000

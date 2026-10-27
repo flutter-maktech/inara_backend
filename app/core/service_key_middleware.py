@@ -14,9 +14,12 @@ database write, so no write can succeed silently:
   1. Both X-API-Key and Authorization sent       → 400
   2. Key unknown / expired / revoked / wrong env  → 401
   3. Method not GET/HEAD                           → 403  (method gate)
-  4. Path not in allowlist                         → 403  (endpoint allowlist)
-  5. Caller IP not in allowlist (if configured)    → 403
-  6. Rate limit exceeded                           → 429 + Retry-After
+  4. Path not in the key's profile allowlist       → 403  (endpoint allowlist)
+  5. Caller IP not in the profile's list (if set)  → 403
+  6. Rate limit exceeded (profile budget)          → 429 + Retry-After
+
+Each key carries a PROFILE ("reporting" or "website", see service_keys.py) that
+decides its allowlist, IP list, rate budget and extra response redaction.
 
 On success the resolved principal is placed in `scope["state"]
 ["service_principal"]`, where `get_current_user` (dependencies.py) picks it up.
@@ -112,18 +115,19 @@ class ServiceKeyMiddleware:
                 [(b"www-authenticate", self.header_name.encode())],
             )
         fp = key_fingerprint(principal.key_hash)
+        profile = principal.profile
 
         # 3. Method gate: read-only, always
         if method not in READ_ONLY_METHODS:
-            logger.warning("service-key write blocked key=%s %s %s", fp, method, path)
+            logger.warning("service-key write blocked key=%s profile=%s %s %s", fp, profile.name, method, path)
             return await _send_json(send, 403, {
                 "detail": "This API key is read-only. Only GET requests are permitted.",
                 "method": method,
             }, [(b"allow", b"GET, HEAD")])
 
         # 4. Endpoint allowlist
-        if not is_path_allowed(path):
-            logger.warning("service-key path blocked key=%s %s", fp, path)
+        if not is_path_allowed(path, profile):
+            logger.warning("service-key path blocked key=%s profile=%s %s", fp, profile.name, path)
             return await _send_json(send, 403, {
                 "detail": "This API key is not authorised for this endpoint.",
                 "path": path,
@@ -131,22 +135,23 @@ class ServiceKeyMiddleware:
 
         # 5. Optional IP allowlist
         ip = _client_ip(scope)
-        if not is_ip_allowed(ip):
-            logger.warning("service-key IP blocked key=%s ip=%s", fp, ip)
+        if not is_ip_allowed(ip, profile):
+            logger.warning("service-key IP blocked key=%s profile=%s ip=%s", fp, profile.name, ip)
             return await _send_json(send, 403, {
                 "detail": "Requests with this API key are not permitted from this IP address.",
             })
 
         # 6. Rate limit
-        allowed, remaining, retry_after = rate_limiter.hit(principal.key_hash)
+        limit = profile.rate_limit_per_minute
+        allowed, remaining, retry_after = rate_limiter.hit(principal.key_hash, limit)
         limit_headers = [
-            (b"x-ratelimit-limit", str(rate_limiter.limit).encode()),
+            (b"x-ratelimit-limit", str(limit).encode()),
             (b"x-ratelimit-remaining", str(remaining).encode()),
         ]
         if not allowed:
             return await _send_json(send, 429, {
                 "detail": "Rate limit exceeded. Retry after the number of seconds in Retry-After.",
-                "limit_per_minute": rate_limiter.limit,
+                "limit_per_minute": limit,
             }, limit_headers + [(b"retry-after", str(retry_after).encode())])
 
         # Hand the principal to the dependency layer
@@ -154,7 +159,7 @@ class ServiceKeyMiddleware:
         scope["state"]["service_principal"] = principal.user
         scope["state"]["service_key_fingerprint"] = fp
 
-        redact = settings.SERVICE_KEY_REDACT_PERSONAL_DATA
+        redact = settings.SERVICE_KEY_REDACT_PERSONAL_DATA or profile.force_redaction
         held_start: dict = {}
         body_chunks: list = []
 
@@ -180,7 +185,8 @@ class ServiceKeyMiddleware:
                 raw = b"".join(body_chunks)
                 try:
                     payload = json.dumps(
-                        redact_personal_data(json.loads(raw)), default=str
+                        redact_personal_data(json.loads(raw), profile.extra_redact_keys),
+                        default=str,
                     ).encode("utf-8")
                 except (ValueError, TypeError):
                     payload = raw                      # not valid JSON: pass through unchanged

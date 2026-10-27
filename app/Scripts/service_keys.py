@@ -6,6 +6,7 @@ Command-line tool for managing read-only Service API Keys.
 Run it inside the backend container (Coolify → backend → Terminal):
 
     python -m app.Scripts.service_keys create --name "AI Reporting" --days 365
+    python -m app.Scripts.service_keys create --profile website --days 365   # public website key
     python -m app.Scripts.service_keys list
     python -m app.Scripts.service_keys revoke <fingerprint>
 
@@ -19,8 +20,9 @@ Staging and production have separate databases and separate
 SERVICE_KEY_ENV_LABEL values ("stg" / "live"), so a key only works in the
 environment where it was created.
 
-WARNING: app/Scripts/seed.py wipes the Otp table, which deletes all service
-keys. Never run the seed script against production.
+NOTE: app/Scripts/seed.py (production bootstrap) is non-destructive, and
+app/Scripts/cleanup_seed_data.py deliberately preserves service keys and
+service accounts, so neither affects issued keys.
 """
 
 from __future__ import annotations
@@ -29,7 +31,7 @@ import argparse
 import asyncio
 
 from app.core.config import settings
-from app.core.service_keys import issue_key, list_keys, revoke_key
+from app.core.service_keys import PROFILES_BY_NAME, issue_key, list_keys, revoke_key
 from app.db.db_client import connect_db, disconnect_db
 
 
@@ -38,7 +40,12 @@ async def _main(argv=None) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     c = sub.add_parser("create", help="Issue a new read-only key")
-    c.add_argument("--name", default="AI Reporting", help="Service account name")
+    c.add_argument(
+        "--profile", choices=sorted(PROFILES_BY_NAME), default="reporting",
+        help="Key scope: 'reporting' (default, unchanged) or 'website' (six public-catalogue endpoints only)",
+    )
+    c.add_argument("--name", default=None,
+                   help="Service account name (default: 'AI Reporting', or 'Inara Website' for --profile website)")
     c.add_argument("--days", type=int, default=365, help="Validity in days (default 365)")
 
     sub.add_parser("list", help="List active keys (fingerprints only)")
@@ -50,9 +57,12 @@ async def _main(argv=None) -> int:
     await connect_db()
     try:
         if args.cmd == "create":
-            raw, fp = await issue_key(args.name, args.days)
+            name = args.name or ("Inara Website" if args.profile == "website" else "AI Reporting")
+            raw, fp = await issue_key(name, args.days, PROFILES_BY_NAME[args.profile])
             print("=" * 72)
             print(f" Environment : {settings.SERVICE_KEY_ENV_LABEL}")
+            print(f" Profile     : {args.profile}")
+            print(f" Account     : {name}")
             print(f" Fingerprint : {fp}")
             print(f" Valid for   : {args.days} days")
             print(f" Header      : {settings.SERVICE_KEY_HEADER_NAME}: <key>")
@@ -64,7 +74,7 @@ async def _main(argv=None) -> int:
             if not rows:
                 print("No service keys.")
             for row in rows:
-                print(f"{row['fingerprint']}  {row['account']:<45} created={row['createdAt']}  expires={row['expiresAt']}")
+                print(f"{row['fingerprint']}  {row['profile']:<10} {row['account']:<45} created={row['createdAt']}  expires={row['expiresAt']}")
         elif args.cmd == "revoke":
             n = await revoke_key(args.fingerprint)
             print(f"Revoked {n} key(s). Takes effect within {settings.SERVICE_KEY_CACHE_TTL_SECONDS}s on every worker.")
