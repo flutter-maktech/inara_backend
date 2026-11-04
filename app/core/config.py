@@ -68,7 +68,8 @@ class Settings(BaseSettings):
     # after accepting an invitation, to log in to the web dashboard.
     # Previously hardcoded in roleMatrix.py and roleMatrix_service.py —
     # now sourced from .env so it can differ per environment/deployment.
-    DASHBOARD_LOGIN_URL: str = "https://inara-dashboard.app.maktechapp.cloud/"
+    # DASHBOARD_LOGIN_URL: str = "https://inara-dashboard.app.maktechapp.cloud/"
+    DASHBOARD_LOGIN_URL: str = "https://admin.inarayoga.com/"
 
     # ── WhatsApp Business Cloud API ───────────────────
     # Phone Number ID  : 1176121902245206
