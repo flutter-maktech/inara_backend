@@ -369,6 +369,7 @@ model Package {
   // Settings
   isActive        Boolean  @default(true)  @map("is_active")
   autoRenew       Boolean  @default(false) @map("auto_renew")
+  allowRepurchase Boolean  @default(true)  @map("allow_repurchase")
   order           Int      @default(0)
 
   // Metadata
