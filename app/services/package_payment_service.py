@@ -265,22 +265,19 @@ class PackagePaymentService:
 
 async def _assert_no_active_package_membership(user_id: str, package) -> None:
     """
-    Raise HTTP 409 if the user already holds a valid (non-expired) activation
-    record that was created from a prior purchase of this exact package.
+    Enforces package repurchase restrictions per business rules:
 
-    DESIGN: Packages and Memberships are fully independent domain objects.
-    A user who has an active *Membership* (from the membership catalogue)
-    with the same display name as a Package is NOT blocked — those are
-    different products in different domains.
+    1. Promotional / One-Time Packages (allowRepurchase == False):
+       Cannot be purchased again by the same member once it has EVER been purchased
+       (even after expiry or all sessions used up).
 
-    We scope the check strictly to package-backed activation records by:
-      1. Finding successful PaymentLog rows for this user with module=PACKAGE.
-      2. Checking whether any of those logs produced an active (non-expired)
-         activation record (a Membership row) for the same package name,
-         linked via paymentLogId.
-
-    This ensures name collisions between the Package catalogue and the
-    Membership catalogue cannot produce false-positive 409 responses.
+    2. Standard Packages (allowRepurchase == True):
+       Cannot be purchased again while an existing purchase is still active.
+       An instance is considered active if:
+         - It has not expired (endDate > now), AND
+         - It still has sessions remaining (sessions_remaining > 0 or unlimited).
+       Once all sessions are used up OR it reaches its expiry date (whichever comes first),
+       the member is allowed to re-purchase immediately.
     """
     now = datetime.now(timezone.utc)
 
@@ -298,27 +295,51 @@ async def _assert_no_active_package_membership(user_id: str, package) -> None:
 
     log_ids = [log.id for log in package_logs]
 
-    # Step 2 — check for an active activation record linked to one of those logs
-    existing = await prisma.membership.find_first(
+    # Step 2 — check prior activation records for this exact package
+    prior_memberships = await prisma.membership.find_many(
         where={
             "userId":       user_id,
             "name":         package.name,
-            "status":       "ACTIVE",
-            "endDate":      {"gt": now},
             "paymentLogId": {"in": log_ids},
         }
     )
 
-    if existing:
-        end_label = existing.endDate.strftime("%d %b %Y") if existing.endDate else "unknown date"
+    if not prior_memberships:
+        return
+
+    # RULE 1 — One-time promotional packages:
+    allow_repurchase = getattr(package, "allowRepurchase", True)
+    if not allow_repurchase:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                f"You already have an active '{package.name}' package that is valid "
-                f"until {end_label}. You cannot purchase the same package while it is "
-                "still active."
+                f"'{package.name}' is a one-time promotional package and cannot be "
+                "re-purchased by the same member."
             ),
         )
+
+    # RULE 2 — Standard packages:
+    # Block ONLY if there is an active membership with unexpired time AND sessions remaining.
+    from app.services.package_service import _decode_time_restriction
+
+    for m in prior_memberships:
+        if m.status == "ACTIVE" and m.endDate and m.endDate > now:
+            _, total_sessions = _decode_time_restriction(m.timeRestriction)
+            sessions_used = int(m.progress or 0)
+            sessions_remaining = (total_sessions - sessions_used) if total_sessions is not None else None
+
+            # Block only if sessions are unlimited OR there are sessions still left:
+            if sessions_remaining is None or sessions_remaining > 0:
+                end_label = m.endDate.strftime("%d %b %Y") if m.endDate else "unknown date"
+                sess_label = f" with {sessions_remaining} session(s) remaining" if sessions_remaining is not None else ""
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"You already have an active '{package.name}' package valid "
+                        f"until {end_label}{sess_label}. You can purchase this package "
+                        "again once your current sessions run out or it expires."
+                    ),
+                )
 
 
 async def _activate_package_membership(user_id, package, payment_method, log_id, auto_renew) -> object:

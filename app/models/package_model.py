@@ -17,6 +17,7 @@ class PackageBase(BaseModel):
     numberOfSessions: Optional[int] = None     # Total sessions Admin sets (None = unlimited)
     timeRestriction: Optional[str] = None      # e.g., "Before 3:00 PM"
     autoRenew: bool = False                    # Auto Renew toggle
+    allowRepurchase: bool = True              # Allow repeat purchases after expiry/sessions out
 
 
 class PackageCreate(PackageBase):
@@ -35,6 +36,7 @@ class PackageUpdate(BaseModel):
     numberOfSessions: Optional[int] = None
     timeRestriction: Optional[str] = None
     autoRenew: Optional[bool] = None
+    allowRepurchase: Optional[bool] = None
     isActive: Optional[bool] = None
     order: Optional[int] = None
 
@@ -102,6 +104,7 @@ class PackageCatalogue(BaseModel):
     numberOfSessions: Optional[int] = None             # Total sessions (None = unlimited)
     timeRestriction: Optional[str] = None
     autoRenew: bool
+    allowRepurchase: bool = True
     isActive: bool
     totalClasses: Optional[int] = 0
     classDetails: Optional[List[dict]] = []
@@ -210,6 +213,7 @@ class UserPackageInstance(BaseModel):
     sessionsRemaining: Optional[int] = None        # Remaining sessions (None = unlimited)
     timeRestriction: Optional[str] = None
     autoRenew: bool = False
+    allowRepurchase: bool = True
     isActive: bool = True
     status: str
     startDate: datetime
