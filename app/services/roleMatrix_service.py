@@ -254,22 +254,25 @@ class RoleMatrixService:
         # Check if user already exists
         existing_user = await prisma.user.find_unique(where={"email": data.email})
         if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"User with email {data.email} already exists"
-            )
-        
-        # Check for pending invitation
-        existing_invitation = await prisma.invitation.find_first(
+            if existing_user.isActive:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"An active user with email {data.email} already exists"
+                )
+            # If user exists but is inactive (e.g. deleted/deactivated instructor),
+            # allow sending a re-invitation!
+
+        # Cancel any previous PENDING invitations for this email so a fresh one can be sent
+        old_pending_invites = await prisma.invitation.find_many(
             where={
                 "email": data.email,
                 "status": InvitationStatus.PENDING
             }
         )
-        if existing_invitation:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Pending invitation already exists for {data.email}"
+        for old_inv in old_pending_invites:
+            await prisma.invitation.update(
+                where={"id": old_inv.id},
+                data={"status": InvitationStatus.CANCELLED}
             )
         
         # Generate secure invite token
@@ -473,28 +476,41 @@ class RoleMatrixService:
                 detail="Invitation has expired"
             )
         
-        # Check if user already exists (edge case)
+        # Check if user already exists
         existing_user = await prisma.user.find_unique(where={"email": invitation.email})
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User already exists with this email"
-            )
-        
-        # Create user account
         password_hash = _hash_password(data.password)
-        
-        user = await prisma.user.create(
-            data={
-                "email": invitation.email,
-                "passwordHash": password_hash,
-                "name": data.name,
-                "phone": data.phone,
-                "role": invitation.role,
-                "isActive": True,
-                "isVerified": True  # Skip verification for invited users
-            }
-        )
+
+        if existing_user:
+            if existing_user.isActive:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="An active user already exists with this email"
+                )
+            # Reactivate previously deleted/inactive team member
+            user = await prisma.user.update(
+                where={"id": existing_user.id},
+                data={
+                    "passwordHash": password_hash,
+                    "name": data.name,
+                    "phone": data.phone,
+                    "role": invitation.role,
+                    "isActive": True,
+                    "isVerified": True
+                }
+            )
+        else:
+            # Create user account
+            user = await prisma.user.create(
+                data={
+                    "email": invitation.email,
+                    "passwordHash": password_hash,
+                    "name": data.name,
+                    "phone": data.phone,
+                    "role": invitation.role,
+                    "isActive": True,
+                    "isVerified": True  # Skip verification for invited users
+                }
+            )
         
         # Mark invitation as accepted
         await prisma.invitation.update(

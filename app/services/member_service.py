@@ -1063,7 +1063,7 @@ class MemberService:
 
         # Block re-inviting an existing active user
         existing_user = await prisma.user.find_unique(where={"email": data.email})
-        if existing_user:
+        if existing_user and existing_user.isActive:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="A user with this email already exists"
@@ -1297,22 +1297,20 @@ class MemberService:
                 detail="Invitation has expired. Please ask the admin to resend it."
             )
 
-        # Guard: no duplicate accounts
+        # Guard: no duplicate accounts for active users
         existing_user = await prisma.user.find_unique(
             where={"email": invitation.email}
         )
-        if existing_user:
+        if existing_user and existing_user.isActive:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="An account with this email already exists"
             )
 
-        # Create the user account — verified immediately (no OTP needed)
+        # Create or reactivate the user account — verified immediately (no OTP needed)
         password_hash = security.get_password_hash(data.password)
 
-        # Build the create payload; only include gender when the user supplied it
         user_data: Dict[str, Any] = {
-            "email":        invitation.email,
             "passwordHash": password_hash,
             "name":         data.name,
             "phone":        data.phone,
@@ -1323,7 +1321,14 @@ class MemberService:
         if data.gender:
             user_data["gender"] = data.gender
 
-        user = await prisma.user.create(data=user_data)
+        if existing_user:
+            user = await prisma.user.update(
+                where={"id": existing_user.id},
+                data=user_data
+            )
+        else:
+            user_data["email"] = invitation.email
+            user = await prisma.user.create(data=user_data)
 
         # Mark invitation as accepted
         await prisma.memberinvitation.update(
