@@ -50,18 +50,24 @@ ADMIN_EMAIL: str = os.getenv("BOOTSTRAP_ADMIN_EMAIL", "imanelmahdi@gmail.com").s
 ADMIN_PASSWORD: str = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "Admin123!")
 ADMIN_NAME: str = "Admin"
 
-# Role Matrix defaults — what each role can see in the dashboard.
+# Role Matrix defaults — 1:1 match with Dashboard Sidebar's 16 modules.
 PERMISSION_RULES = [
-    {"moduleName": "Dashboard/Overview",   "adminAccess": "VISIBLE", "managerAccess": "HIDDEN",  "instructorAccess": "HIDDEN",  "displayOrder": 1},
-    {"moduleName": "Classes & Courses",    "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "VISIBLE", "displayOrder": 2},
-    {"moduleName": "Member Database",      "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "VISIBLE", "displayOrder": 3},
-    {"moduleName": "Instructor Directory", "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "VISIBLE", "displayOrder": 4},
-    {"moduleName": "App Settings",         "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 5},
-    {"moduleName": "Financial Reporting",  "adminAccess": "VISIBLE", "managerAccess": "HIDDEN",  "instructorAccess": "HIDDEN",  "displayOrder": 6},
-    {"moduleName": "Role Matrix",          "adminAccess": "VISIBLE", "managerAccess": "HIDDEN",  "instructorAccess": "HIDDEN",  "displayOrder": 7},
-    {"moduleName": "Legal Documents",      "adminAccess": "VISIBLE", "managerAccess": "HIDDEN",  "instructorAccess": "HIDDEN",  "displayOrder": 8},
-    {"moduleName": "Payment Logs",         "adminAccess": "VISIBLE", "managerAccess": "HIDDEN",  "instructorAccess": "HIDDEN",  "displayOrder": 9},
-    {"moduleName": "Wallet Management",    "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 10},
+    {"moduleName": "Dashboard",          "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 1},
+    {"moduleName": "Classes",            "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "VISIBLE", "displayOrder": 2},
+    {"moduleName": "Courses",            "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "VISIBLE", "displayOrder": 3},
+    {"moduleName": "Members",            "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "VISIBLE", "displayOrder": 4},
+    {"moduleName": "Instructors",        "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 5},
+    {"moduleName": "Managers",           "adminAccess": "VISIBLE", "managerAccess": "HIDDEN",  "instructorAccess": "HIDDEN",  "displayOrder": 6},
+    {"moduleName": "Membership",         "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 7},
+    {"moduleName": "Packages",           "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 8},
+    {"moduleName": "Store",              "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 9},
+    {"moduleName": "Order",              "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 10},
+    {"moduleName": "News",               "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 11},
+    {"moduleName": "About Us",           "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 12},
+    {"moduleName": "Role Matrix",        "adminAccess": "VISIBLE", "managerAccess": "HIDDEN",  "instructorAccess": "HIDDEN",  "displayOrder": 13},
+    {"moduleName": "Terms & Conditions", "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 14},
+    {"moduleName": "Privacy Policy",     "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 15},
+    {"moduleName": "FAQ",                "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 16},
 ]
 
 
@@ -71,13 +77,14 @@ PERMISSION_RULES = [
 # ════════════════════════════════════════════════════════════════════════════
 
 async def ensure_permission_rules(db: Any = prisma) -> int:
-    """Create the default Role Matrix, only if the table is empty. Returns rows created."""
-    if await db.permissionrule.count() > 0:
-        return 0
-
+    """Create or sync the default Role Matrix (16 modules). Returns rows created."""
+    created = 0
     for rule in PERMISSION_RULES:
-        await db.permissionrule.create(data=rule)
-    return len(PERMISSION_RULES)
+        existing = await db.permissionrule.find_unique(where={"moduleName": rule["moduleName"]})
+        if not existing:
+            await db.permissionrule.create(data=rule)
+            created += 1
+    return created
 
 
 async def ensure_admin(db: Any = prisma, *, reset_password: bool = False) -> Tuple[str, str]:

@@ -5,7 +5,7 @@ from app.models.dashboard_model import DashboardAnalytics, RevenueMetrics
 from app.services.dashboard_service import AnalyticsService
 from app.api.v1.dependencies import get_current_active_user
 from app.models.user import UserResponse
-from app.core.permissions import require_staff, require_admin
+from app.core.permissions import require_admin_or_manager, require_admin
 import re
 from dateutil import parser as date_parser
 
@@ -142,7 +142,7 @@ async def get_dashboard_overview(
         True,
         description="Calculate percentage changes vs previous period"
     ),
-    current_user: UserResponse = Depends(require_staff()) 
+    current_user: UserResponse = Depends(require_admin_or_manager()) 
 ):
     """
     **MAIN ENDPOINT**: Get complete dashboard analytics
@@ -180,7 +180,7 @@ async def get_revenue_metrics(
     from_date: Optional[str] = Query(None, example="2026-01-01"),
     to_date: Optional[str] = Query(None, example="2026-12-31"),
     compare_to_previous: bool = Query(True),
-    current_user: UserResponse = Depends(require_staff())  # ✅ ROLE CHECK
+    current_user: UserResponse = Depends(require_admin_or_manager())  # ✅ ROLE CHECK
 ):
     """Get only revenue metrics (6 cards) - useful for real-time updates"""
     # Parse dates
@@ -209,7 +209,7 @@ async def get_revenue_metrics(
 async def get_peak_traffic(
     from_date: Optional[str] = Query(None, example="2026-01-01"),
     to_date: Optional[str] = Query(None, example="2026-12-31"),
-    current_user: UserResponse = Depends(require_staff())  # ✅ ROLE CHECK
+    current_user: UserResponse = Depends(require_admin_or_manager())  # ✅ ROLE CHECK
 ):
     """Get peak traffic hours - useful for scheduling optimization"""
     # Parse dates
@@ -235,7 +235,7 @@ async def get_booking_details(
     from_date: Optional[str] = Query(None, example="2026-01-01"),
     to_date: Optional[str] = Query(None, example="2026-12-31"),
     limit: int = Query(7, ge=1, le=20, description="Number of top items to return"),
-    current_user: UserResponse = Depends(require_staff())  # ✅ ROLE CHECK
+    current_user: UserResponse = Depends(require_admin_or_manager())  # ✅ ROLE CHECK
 ):
     """Get top classes and courses by booking count"""
     # Parse dates

@@ -201,6 +201,26 @@ def _send_invitation_email(
     return send_email(email_to, subject, html_content, text_content)
 
 
+DEFAULT_SIDEBAR_MODULES = [
+    {"moduleName": "Dashboard",          "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 1},
+    {"moduleName": "Classes",            "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "VISIBLE", "displayOrder": 2},
+    {"moduleName": "Courses",            "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "VISIBLE", "displayOrder": 3},
+    {"moduleName": "Members",            "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "VISIBLE", "displayOrder": 4},
+    {"moduleName": "Instructors",        "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 5},
+    {"moduleName": "Managers",           "adminAccess": "VISIBLE", "managerAccess": "HIDDEN",  "instructorAccess": "HIDDEN",  "displayOrder": 6},
+    {"moduleName": "Membership",         "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 7},
+    {"moduleName": "Packages",           "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 8},
+    {"moduleName": "Store",              "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 9},
+    {"moduleName": "Order",              "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 10},
+    {"moduleName": "News",               "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 11},
+    {"moduleName": "About Us",           "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 12},
+    {"moduleName": "Role Matrix",        "adminAccess": "VISIBLE", "managerAccess": "HIDDEN",  "instructorAccess": "HIDDEN",  "displayOrder": 13},
+    {"moduleName": "Terms & Conditions", "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 14},
+    {"moduleName": "Privacy Policy",     "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 15},
+    {"moduleName": "FAQ",                "adminAccess": "VISIBLE", "managerAccess": "VISIBLE", "instructorAccess": "HIDDEN",  "displayOrder": 16},
+]
+
+
 class RoleMatrixService:
     """
     Enterprise-grade Role Matrix service.
@@ -588,10 +608,25 @@ class RoleMatrixService:
     
     @staticmethod
     async def get_visibility_matrix(
-        admin_user_id: str
+        user_id: str
     ) -> VisibilityMatrixResponse:
-        """Get complete visibility matrix"""
-        await RoleMatrixService._require_admin(admin_user_id)
+        """Get complete visibility matrix. Accessible by all authenticated staff to determine permissions."""
+        user = await prisma.user.find_unique(where={"id": user_id})
+        if not user or user.role not in [UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTRUCTOR]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Staff access required"
+            )
+        
+        # Ensure all 16 default sidebar modules exist in the database with real IDs
+        existing_rules = await prisma.permissionrule.find_many()
+        existing_names = {r.moduleName.lower(): r for r in existing_rules}
+
+        for default_rule in DEFAULT_SIDEBAR_MODULES:
+            mod_key = default_rule["moduleName"].lower()
+            already_exists = mod_key in existing_names or (mod_key == "order" and "orders" in existing_names)
+            if not already_exists:
+                await prisma.permissionrule.create(data=default_rule)
         
         rules = await prisma.permissionrule.find_many(
             order={"displayOrder": "asc"}
