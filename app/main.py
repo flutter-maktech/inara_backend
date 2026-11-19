@@ -8,7 +8,7 @@ from app.core.service_key_middleware import ServiceKeyMiddleware
 from app.api.v1 import (
     auth, users, dashboard_analytics, classes, courses,
     memberships, packages, members, instructors, managers, store, order, news, aboutus, roleMatrix, privacy_policy, terms_conditions, faq,
-    payments, notifications, settings as settings_router,
+    payments, notifications, settings as settings_router, whatsapp_webhook,
 )
 
 
@@ -73,6 +73,7 @@ app.include_router(store.router,                prefix=f"{app_settings.API_V1_PR
 app.include_router(order.router,                prefix=f"{app_settings.API_V1_PREFIX}/order",        tags=["Order"])
 app.include_router(payments.router,             prefix=f"{app_settings.API_V1_PREFIX}/payments",     tags=["Payments"])
 app.include_router(notifications.router,        prefix=f"{app_settings.API_V1_PREFIX}/notifications", tags=["Notifications"])
+app.include_router(whatsapp_webhook.router,     prefix=f"{app_settings.API_V1_PREFIX}/whatsapp",      tags=["WhatsApp"])
 app.include_router(settings_router.router,      prefix=f"{app_settings.API_V1_PREFIX}/settings",     tags=["Settings"])
 app.include_router(news.router,                 prefix=f"{app_settings.API_V1_PREFIX}/news",          tags=["News"])
 app.include_router(aboutus.router,              prefix=f"{app_settings.API_V1_PREFIX}/about-us",      tags=["About Us"])

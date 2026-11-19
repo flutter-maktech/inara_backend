@@ -78,6 +78,12 @@ class CoursesService:
             raise HTTPException(status_code=400, detail="Selected user is not an instructor")
 
         course_data = data.model_dump(exclude_none=True)
+        # Ensure course phone links to About Inara studio number if not explicitly set
+        about_us = await prisma.aboutus.find_first()
+        about_phone = about_us.phoneNumber if (about_us and about_us.phoneNumber) else None
+        if about_phone and (not course_data.get("phone") or course_data.get("phone").strip() == ""):
+            course_data["phone"] = about_phone
+
         # Auto-generate map link from location if none was provided
         course_data["locationMapLink"] = resolve_map_link(
             course_data["location"], course_data.get("locationMapLink")
@@ -131,6 +137,9 @@ class CoursesService:
             order={params.sortBy: params.sortOrder},
         )
 
+        about_us = await prisma.aboutus.find_first()
+        about_phone = about_us.phoneNumber if (about_us and about_us.phoneNumber) else None
+
         courses_response = []
         for course in courses:
             confirmed = [
@@ -144,6 +153,9 @@ class CoursesService:
                 "avatar": course.instructor.avatar,
             }
             course_dict = course.model_dump(exclude={"instructor", "bookings"})
+            if about_phone:
+                course_dict["phone"] = about_phone
+
             courses_response.append(
                 CourseResponse(
                     **course_dict,
@@ -214,6 +226,10 @@ class CoursesService:
         }
 
         course_dict = course.model_dump(exclude={"instructor", "bookings"})
+        about_us = await prisma.aboutus.find_first()
+        if about_us and about_us.phoneNumber:
+            course_dict["phone"] = about_us.phoneNumber
+
         return CourseWithDetails(
             **course_dict,
             bookedSeats=confirmed_count,
@@ -588,4 +604,8 @@ class CoursesService:
             "avatar": course.instructor.avatar,
         }
         course_dict = course.model_dump(exclude={"instructor", "bookings"})
+        about_us = await prisma.aboutus.find_first()
+        if about_us and about_us.phoneNumber:
+            course_dict["phone"] = about_us.phoneNumber
+
         return CourseResponse(**course_dict, bookedSeats=len(confirmed), instructor=instructor_info)

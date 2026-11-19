@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any, Literal, Optional, Sequence
 
 from app.db.db_client import prisma
@@ -48,6 +49,22 @@ log = logging.getLogger(__name__)
 
 # Must match the Prisma `NotificationType` enum
 NotificationType = Literal["INFO", "SUCCESS", "WARNING", "ERROR", "REMINDER"]
+
+
+def sanitize_phone_number(phone: str) -> str:
+    """
+    Sanitize phone number to international E.164 digits format (without '+').
+    Qatar numbers are 8 digits (starting with 3, 5, 6, 7).
+    If an 8-digit number is passed, Qatar country code 974 is prepended.
+    """
+    if not phone:
+        return ""
+    digits = re.sub(r"\D", "", phone)
+    if digits.startswith("00"):
+        digits = digits[2:]
+    if len(digits) == 8:
+        digits = f"974{digits}"
+    return digits
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -265,44 +282,121 @@ def _whatsapp_ready() -> bool:
     )
 
 
-async def _whatsapp_send(*, phone: str, title: str, message: str) -> None:
+async def _whatsapp_send(
+    *,
+    phone: str,
+    title: str = "",
+    message: str = "",
+    template_name: Optional[str] = None,
+    template_language: str = "en",
+    template_components: Optional[list] = None,
+) -> dict:
     """
-    Real HTTP call to Meta's Graph API.
+    Real HTTP call to Meta's WhatsApp Cloud API.
+    Supports both free-text messages and approved template messages.
 
     Required environment variables (read via Settings):
-        WHATSAPP_PHONE_NUMBER_ID   – the business phone number's WABA ID
+        WHATSAPP_PHONE_NUMBER_ID   – the business phone number ID
         WHATSAPP_ACCESS_TOKEN      – permanent system-user access token
-        WHATSAPP_API_VERSION       – optional, defaults to "v18.0"
+        WHATSAPP_API_VERSION       – defaults to "v19.0"
     """
     import httpx  # local import keeps cold-start cheap when WhatsApp is unused
 
     access_token    = settings.WHATSAPP_ACCESS_TOKEN
     phone_number_id = settings.WHATSAPP_PHONE_NUMBER_ID
-    api_version     = getattr(settings, "WHATSAPP_API_VERSION", "v18.0")
+    api_version     = getattr(settings, "WHATSAPP_API_VERSION", "v19.0")
 
-    # E.164 digits only — strip "+", spaces, and dashes
-    clean_phone = phone.lstrip("+").replace(" ", "").replace("-", "")
-    body = f"*{title}*\n\n{message}" if title else message
+    clean_phone = sanitize_phone_number(phone)
+    if not clean_phone:
+        raise ValueError(f"Invalid phone number: {phone}")
 
     url = f"https://graph.facebook.com/{api_version}/{phone_number_id}/messages"
 
-    async with httpx.AsyncClient(timeout=10) as client:
+    if template_name:
+        payload: dict[str, Any] = {
+            "messaging_product": "whatsapp",
+            "to": clean_phone,
+            "type": "template",
+            "template": {
+                "name": template_name,
+                "language": {"code": template_language},
+            },
+        }
+        if template_components:
+            payload["template"]["components"] = template_components
+    else:
+        body = f"*{title}*\n\n{message}" if title else message
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": clean_phone,
+            "type": "text",
+            "text": {"body": body, "preview_url": False},
+        }
+
+    async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
             url,
             headers={
                 "Authorization": f"Bearer {access_token}",
                 "Content-Type":  "application/json",
             },
-            json={
-                "messaging_product": "whatsapp",
-                "to":   clean_phone,
-                "type": "text",
-                "text": {"body": body, "preview_url": False},
-            },
+            json=payload,
         )
 
-    # Surface non-2xx so the caller's try/except can log it
-    resp.raise_for_status()
+    if resp.is_error:
+        error_detail = resp.text
+        try:
+            err_data = resp.json().get("error", {})
+            error_detail = (
+                f"Code {err_data.get('code')}: {err_data.get('message')} "
+                f"(subcode: {err_data.get('error_subcode')})"
+            )
+        except Exception:
+            pass
+        log.error("WhatsApp Graph API error for %s: %s", clean_phone, error_detail)
+        resp.raise_for_status()
+
+    return resp.json()
+
+
+async def send_whatsapp_direct(
+    *,
+    phone: str,
+    message: str = "",
+    title: str = "",
+    template_name: Optional[str] = None,
+    template_language: str = "en",
+    template_components: Optional[list] = None,
+) -> dict:
+    """
+    Standalone helper to dispatch a WhatsApp notification to a single phone number.
+    Returns a dict with success boolean and details or error message.
+    """
+    if not _whatsapp_ready():
+        return {
+            "success": False,
+            "error": "WhatsApp credentials not configured.",
+        }
+
+    try:
+        data = await _whatsapp_send(
+            phone=phone,
+            title=title,
+            message=message,
+            template_name=template_name,
+            template_language=template_language,
+            template_components=template_components,
+        )
+        return {
+            "success": True,
+            "data": data,
+        }
+    except Exception as exc:
+        log.error("send_whatsapp_direct failed for %s: %s", phone, exc)
+        return {
+            "success": False,
+            "error": str(exc),
+        }
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -344,4 +438,6 @@ __all__ = [
     "resolve_channels",
     "dispatch_push_notification",
     "notify_user",
+    "send_whatsapp_direct",
+    "sanitize_phone_number",
 ]

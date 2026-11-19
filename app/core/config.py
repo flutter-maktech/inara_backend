@@ -72,15 +72,11 @@ class Settings(BaseSettings):
     DASHBOARD_LOGIN_URL: str = "https://admin.inarayoga.com/"
 
     # ── WhatsApp Business Cloud API ───────────────────
-    # Phone Number ID  : 1176121902245206
-    # App Access Token : 1622669328846991|vUvf0qINepwsujMLJUI5GoCzow0
-    # WABA Account ID  : 27116250234729298
-    # App ID           : 1622669328846991
-    # Test phone       : +1 (555) 647-2522
     WHATSAPP_PHONE_NUMBER_ID: Optional[str] = None
     WHATSAPP_ACCESS_TOKEN: Optional[str] = None
-    WHATSAPP_API_VERSION: str = "v18.0"
+    WHATSAPP_API_VERSION: str = "v19.0"
     WHATSAPP_BUSINESS_ACCOUNT_ID: Optional[str] = None  # informational / webhook verify
+    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = "inara_waba_verify_2026"
 
     # ── Read-only Service API Keys ────────────────────
     # Static, GET-only credentials for machine-to-machine reporting.
