@@ -56,6 +56,7 @@ def sanitize_phone_number(phone: str) -> str:
     Sanitize phone number to international E.164 digits format (without '+').
     Qatar numbers are 8 digits (starting with 3, 5, 6, 7).
     If an 8-digit number is passed, Qatar country code 974 is prepended.
+    If an 11-digit Bangladesh number starting with 01 is passed, 88 is prepended.
     """
     if not phone:
         return ""
@@ -64,6 +65,8 @@ def sanitize_phone_number(phone: str) -> str:
         digits = digits[2:]
     if len(digits) == 8:
         digits = f"974{digits}"
+    elif len(digits) == 11 and digits.startswith("01"):
+        digits = f"88{digits}"
     return digits
 
 
@@ -266,8 +269,10 @@ async def _send_whatsapp(
         await _whatsapp_send(phone=phone, title=title, message=message)
         counters.sent_whatsapp += 1
     except Exception as exc:
-        log.error("WhatsApp dispatch failed for %s: %s", phone, exc)
+        err_str = str(exc)
+        log.error("WhatsApp dispatch failed for %s: %s", phone, err_str)
         counters.failed += 1
+        counters.errors.append(f"{phone}: {err_str}")
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -309,6 +314,11 @@ async def _whatsapp_send(
     clean_phone = sanitize_phone_number(phone)
     if not clean_phone:
         raise ValueError(f"Invalid phone number: {phone}")
+    if clean_phone == "97452013171":
+        raise ValueError(
+            "Cannot send WhatsApp message to the studio's own sender number (+974 5201 3171). "
+            "Please select a member with a personal mobile number."
+        )
 
     url = f"https://graph.facebook.com/{api_version}/{phone_number_id}/messages"
 
@@ -354,7 +364,7 @@ async def _whatsapp_send(
         except Exception:
             pass
         log.error("WhatsApp Graph API error for %s: %s", clean_phone, error_detail)
-        resp.raise_for_status()
+        raise RuntimeError(f"Meta WhatsApp API error: {error_detail}")
 
     return resp.json()
 
@@ -409,7 +419,7 @@ class _Counter:
     __slots__ = (
         "sent_app", "sent_whatsapp",
         "skipped_app", "skipped_whatsapp",
-        "failed",
+        "failed", "errors",
     )
 
     def __init__(self) -> None:
@@ -418,14 +428,16 @@ class _Counter:
         self.skipped_app = 0
         self.skipped_whatsapp = 0
         self.failed = 0
+        self.errors: list[str] = []
 
-    def to_dict(self) -> dict[str, int]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "sentViaApp":      self.sent_app,
             "sentViaWhatsApp": self.sent_whatsapp,
             "skippedApp":      self.skipped_app,
             "skippedWhatsApp": self.skipped_whatsapp,
             "failed":          self.failed,
+            "errors":          self.errors,
         }
 
 

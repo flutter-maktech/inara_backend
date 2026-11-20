@@ -829,8 +829,15 @@ class MemberService:
             send_via_whatsapp=use_whatsapp,
         )
 
+        status_msg = "Notifications dispatched successfully"
+        if result["failed"] > 0 and result["sentViaWhatsApp"] == 0 and result["sentViaApp"] == 0:
+            err_details = "; ".join(result.get("errors", []))
+            status_msg = f"Delivery failed: {err_details}" if err_details else "Failed to dispatch notifications"
+        elif result["failed"] > 0:
+            status_msg = "Notifications partially dispatched with some errors"
+
         return SendNotificationResponse(
-            message="Notifications dispatched successfully",
+            message=status_msg,
             sentTo=len(users),
             channel=channel,
             sentViaApp=result["sentViaApp"],
@@ -838,6 +845,7 @@ class MemberService:
             skippedApp=result["skippedApp"],
             skippedWhatsApp=result["skippedWhatsApp"],
             failed=result["failed"],
+            errors=result.get("errors", []),
         )
 
     # ─────────────────────────────────────────

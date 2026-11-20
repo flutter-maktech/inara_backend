@@ -283,6 +283,7 @@ class SendNotificationResponse(BaseModel):
     skippedApp: int = 0
     skippedWhatsApp: int = 0
     failed: int = 0
+    errors: list[str] = []
 
 
 # ============================================
