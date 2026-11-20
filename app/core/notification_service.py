@@ -54,9 +54,9 @@ NotificationType = Literal["INFO", "SUCCESS", "WARNING", "ERROR", "REMINDER"]
 def sanitize_phone_number(phone: str) -> str:
     """
     Sanitize phone number to international E.164 digits format (without '+').
-    Qatar numbers are 8 digits (starting with 3, 5, 6, 7).
-    If an 8-digit number is passed, Qatar country code 974 is prepended.
-    If an 11-digit Bangladesh number starting with 01 is passed, 88 is prepended.
+    Qatar numbers are 8 digits (starting with 3, 5, 6, 7) -> prepends 974.
+    Bangladesh numbers starting with 01 (10 to 12 digits) -> prepends 88 (e.g. 8801...).
+    Already formatted numbers with country codes are kept as-is.
     """
     if not phone:
         return ""
@@ -65,7 +65,7 @@ def sanitize_phone_number(phone: str) -> str:
         digits = digits[2:]
     if len(digits) == 8:
         digits = f"974{digits}"
-    elif len(digits) == 11 and digits.startswith("01"):
+    elif digits.startswith("01") and len(digits) in (10, 11, 12):
         digits = f"88{digits}"
     return digits
 
