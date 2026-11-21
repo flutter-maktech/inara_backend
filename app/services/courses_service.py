@@ -153,7 +153,7 @@ class CoursesService:
                 "avatar": course.instructor.avatar,
             }
             course_dict = course.model_dump(exclude={"instructor", "bookings"})
-            if about_phone:
+            if about_phone and (not course_dict.get("phone") or not str(course_dict.get("phone")).strip()):
                 course_dict["phone"] = about_phone
 
             courses_response.append(
@@ -227,7 +227,7 @@ class CoursesService:
 
         course_dict = course.model_dump(exclude={"instructor", "bookings"})
         about_us = await prisma.aboutus.find_first()
-        if about_us and about_us.phoneNumber:
+        if about_us and about_us.phoneNumber and (not course_dict.get("phone") or not str(course_dict.get("phone")).strip()):
             course_dict["phone"] = about_us.phoneNumber
 
         return CourseWithDetails(
@@ -612,7 +612,7 @@ class CoursesService:
         }
         course_dict = course.model_dump(exclude={"instructor", "bookings"})
         about_us = await prisma.aboutus.find_first()
-        if about_us and about_us.phoneNumber:
+        if about_us and about_us.phoneNumber and (not course_dict.get("phone") or not str(course_dict.get("phone")).strip()):
             course_dict["phone"] = about_us.phoneNumber
 
         return CourseResponse(**course_dict, bookedSeats=len(confirmed), instructor=instructor_info)
