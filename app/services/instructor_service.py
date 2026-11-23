@@ -457,7 +457,7 @@ class InstructorService:
         participant) and deletes the account, via the same shared,
         transaction-safe helper used for self-delete and manager-delete.
         """
-        await InstructorService._require_admin(caller_id)
+        await InstructorService._require_admin_or_manager(caller_id)
 
         instructor = await prisma.user.find_unique(where={"id": instructor_id})
         if not instructor or instructor.role != UserRole.INSTRUCTOR:

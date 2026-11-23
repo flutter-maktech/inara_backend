@@ -19,7 +19,7 @@ POLICY (latest revision)
      • Create & Update everything EXCEPT Memberships and Packages
        (managers can still VIEW the membership / package landing pages
        but cannot create, edit or delete those entities).
-     • Cannot DELETE anything anywhere.
+     • Can remove/deactivate Instructors; cannot DELETE other entities.
 
   INSTRUCTOR
      • View everything (subject to Role-Matrix visibility).
@@ -192,7 +192,7 @@ _MATRIX: dict[str, dict[str, set]] = {
         Action.VIEW:   _EVERYONE,
         Action.CREATE: _ADMIN_ONLY,         # via Role-Matrix invitations
         Action.UPDATE: _ADMIN_AND_MGR,      # ownership lets instructors self-edit
-        Action.DELETE: _ADMIN_ONLY,
+        Action.DELETE: _ADMIN_AND_MGR,
     },
 
     Resource.MEMBER: {

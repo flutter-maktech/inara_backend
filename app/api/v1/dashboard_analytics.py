@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, Query, status, HTTPException
 from datetime import datetime
 from typing import Optional
-from app.models.dashboard_model import DashboardAnalytics, RevenueMetrics
+from app.models.dashboard_model import DashboardAnalytics, RevenueMetrics, MetricCard
 from app.services.dashboard_service import AnalyticsService
 from app.api.v1.dependencies import get_current_active_user
 from app.models.user import UserResponse
-from app.core.permissions import require_admin_or_manager, require_admin
+from app.core.permissions import require_admin_or_manager, require_admin, Roles
 import re
 from dateutil import parser as date_parser
 
@@ -158,11 +158,21 @@ async def get_dashboard_overview(
     parsed_to_date = parse_flexible_date(to_date, end_of_day=True)
     _ensure_valid_range(parsed_from_date, parsed_to_date)
     
-    return await AnalyticsService.get_dashboard_analytics(
+    result = await AnalyticsService.get_dashboard_analytics(
         from_date=parsed_from_date,
         to_date=parsed_to_date,
         compare_to_previous=compare_to_previous
     )
+
+    # Financial data restriction: Managers must not see financial info on the dashboard
+    if current_user.role == Roles.MANAGER:
+        result.revenue = None
+        result.revenue_overview = []
+        result.metrics.total_revenue_30days = MetricCard(label="Revenue", value=0.0, metric_type="count")
+        result.metrics.store_revenue_30days = MetricCard(label="Store Revenue", value=0.0, metric_type="count")
+        result.metrics.course_revenue_30days = MetricCard(label="Course Revenue", value=0.0, metric_type="count")
+
+    return result
 
 
 # ============================================
@@ -180,7 +190,7 @@ async def get_revenue_metrics(
     from_date: Optional[str] = Query(None, example="2026-01-01"),
     to_date: Optional[str] = Query(None, example="2026-12-31"),
     compare_to_previous: bool = Query(True),
-    current_user: UserResponse = Depends(require_admin_or_manager())  # ✅ ROLE CHECK
+    current_user: UserResponse = Depends(require_admin())  # ✅ ADMIN ONLY (Restricted from managers)
 ):
     """Get only revenue metrics (6 cards) - useful for real-time updates"""
     # Parse dates

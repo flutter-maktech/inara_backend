@@ -152,7 +152,7 @@ instructor_id: str,
 
 
 # ─────────────────────────────────────────────────────────────────
-# DELETE INSTRUCTOR (Admin only)
+# DELETE INSTRUCTOR (Admin and Manager)
 # ─────────────────────────────────────────────────────────────────
 
 @router.delete("/{instructor_id}")
@@ -187,7 +187,7 @@ async def delete_instructor(
     with teaching history.
 
     **UI Reference:** Delete action on Instructors page (Image 1)
-    **Access:** Admin only
+    **Access:** Admin and Manager
     """
     return await InstructorService.delete_instructor(
         caller_id=current_user.id,
