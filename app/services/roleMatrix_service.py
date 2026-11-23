@@ -666,6 +666,28 @@ class RoleMatrixService:
             where={"id": rule_id},
             data=update_data
         )
+
+        # Synchronize any alias rules in DB so legacy rows never conflict
+        alias_groups = [
+            {"dashboard", "dashboard/overview", "financial reporting", "overview"},
+            {"classes & courses", "classes", "courses"},
+            {"member database", "members"},
+            {"instructor directory", "instructors"},
+        ]
+        target_mod = (rule.moduleName or "").lower().strip()
+        for group in alias_groups:
+            if target_mod in group:
+                try:
+                    all_rules = await prisma.permissionrule.find_many()
+                    for r in all_rules:
+                        if r.id != rule_id and (r.moduleName or "").lower().strip() in group:
+                            await prisma.permissionrule.update(
+                                where={"id": r.id},
+                                data=update_data
+                            )
+                except Exception:
+                    pass
+                break
         
         return PermissionRuleResponse(**updated_rule.model_dump())
     
