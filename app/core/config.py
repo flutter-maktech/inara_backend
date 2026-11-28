@@ -77,6 +77,8 @@ class Settings(BaseSettings):
     WHATSAPP_API_VERSION: str = "v19.0"
     WHATSAPP_BUSINESS_ACCOUNT_ID: Optional[str] = None  # informational / webhook verify
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = "inara_waba_verify_2026"
+    WHATSAPP_DEFAULT_TEMPLATE_NAME: str = "inara_member_message"
+    WHATSAPP_DEFAULT_TEMPLATE_LANG: str = "en"
 
     # ── Read-only Service API Keys ────────────────────
     # Static, GET-only credentials for machine-to-machine reporting.

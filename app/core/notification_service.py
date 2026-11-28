@@ -239,13 +239,32 @@ async def _send_app(
         counters.failed += 1
 
 
+def _extract_template_body(message: str) -> str:
+    """
+    Extract clean notification content if caller pasted the approved template text:
+    'Hello {{1}}, a message from Inara Yoga.\n\n<content>\n\nIf you have any questions...'
+    """
+    if not message:
+        return ""
+    text = message.strip()
+    if "Hello " in text and "a message from Inara Yoga" in text:
+        parts = [p.strip() for p in text.split("\n\n") if p.strip()]
+        if parts and "Hello " in parts[0] and "Inara Yoga" in parts[0]:
+            parts = parts[1:]
+        if parts and ("If you have any questions" in parts[-1] or "seeing you at the studio" in parts[-1]):
+            parts = parts[:-1]
+        if parts:
+            text = "\n\n".join(parts).strip()
+    return text
+
+
 async def _send_whatsapp(
     user: Any,
     title: str,
     message: str,
     counters: "_Counter",
 ) -> None:
-    """Send a WhatsApp Business Cloud API text message."""
+    """Send a WhatsApp Business Cloud API message (using approved template if configured)."""
     enabled = getattr(user, "whatsappNotificationsEnabled", True)
     if enabled is None:
         enabled = True
@@ -266,7 +285,39 @@ async def _send_whatsapp(
         return
 
     try:
-        await _whatsapp_send(phone=phone, title=title, message=message)
+        default_template = getattr(settings, "WHATSAPP_DEFAULT_TEMPLATE_NAME", None)
+        default_lang = getattr(settings, "WHATSAPP_DEFAULT_TEMPLATE_LANG", "en")
+
+        if default_template:
+            # 1. Recipient name for {{1}}
+            name = getattr(user, "name", None) or getattr(user, "firstName", None) or ""
+            recipient_name = name.strip() if name and name.strip() else "Member"
+
+            # 2. Notification content for {{2}}
+            body_text = _extract_template_body(message)
+            if title and title.strip() and title.strip().lower() not in ("inara yoga", "notification from inara yoga"):
+                body_text = f"*{title.strip()}*\n\n{body_text}" if body_text else title.strip()
+            if not body_text:
+                body_text = "Please check the Inara Yoga app for updates."
+
+            components = [
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": recipient_name},
+                        {"type": "text", "text": body_text},
+                    ],
+                }
+            ]
+            await _whatsapp_send(
+                phone=phone,
+                template_name=default_template,
+                template_language=default_lang,
+                template_components=components,
+            )
+        else:
+            await _whatsapp_send(phone=phone, title=title, message=message)
+
         counters.sent_whatsapp += 1
     except Exception as exc:
         err_str = str(exc)
@@ -375,7 +426,7 @@ async def send_whatsapp_direct(
     message: str = "",
     title: str = "",
     template_name: Optional[str] = None,
-    template_language: str = "en",
+    template_language: Optional[str] = None,
     template_components: Optional[list] = None,
 ) -> dict:
     """
@@ -388,13 +439,29 @@ async def send_whatsapp_direct(
             "error": "WhatsApp credentials not configured.",
         }
 
+    effective_template = template_name or getattr(settings, "WHATSAPP_DEFAULT_TEMPLATE_NAME", None)
+    effective_lang = template_language or getattr(settings, "WHATSAPP_DEFAULT_TEMPLATE_LANG", "en")
+
+    if effective_template and not template_components:
+        recipient_name = title.strip() if (title and title.strip().lower() not in ("inara yoga", "notification from inara yoga")) else "Member"
+        body_text = _extract_template_body(message) or "Please check the Inara Yoga app for updates."
+        template_components = [
+            {
+                "type": "body",
+                "parameters": [
+                    {"type": "text", "text": recipient_name},
+                    {"type": "text", "text": body_text},
+                ],
+            }
+        ]
+
     try:
         data = await _whatsapp_send(
             phone=phone,
             title=title,
             message=message,
-            template_name=template_name,
-            template_language=template_language,
+            template_name=effective_template,
+            template_language=effective_lang,
             template_components=template_components,
         )
         return {

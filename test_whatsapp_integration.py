@@ -9,7 +9,7 @@ sys.path.insert(0, backend_dir)
 
 from app.main import app
 from app.core.config import settings
-from app.core.notification_service import sanitize_phone_number
+from app.core.notification_service import sanitize_phone_number, _extract_template_body
 
 
 class TestWhatsAppIntegration(unittest.IsolatedAsyncioTestCase):
@@ -25,6 +25,8 @@ class TestWhatsAppIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(settings.WHATSAPP_API_VERSION, "v19.0")
         self.assertEqual(settings.WHATSAPP_BUSINESS_ACCOUNT_ID, "2022478045055062")
         self.assertEqual(settings.WHATSAPP_WEBHOOK_VERIFY_TOKEN, "inara_waba_verify_2026")
+        self.assertEqual(settings.WHATSAPP_DEFAULT_TEMPLATE_NAME, "inara_member_message")
+        self.assertEqual(settings.WHATSAPP_DEFAULT_TEMPLATE_LANG, "en")
         self.assertTrue(len(settings.WHATSAPP_ACCESS_TOKEN) > 50)
 
     async def test_phone_sanitization(self):
@@ -39,6 +41,19 @@ class TestWhatsAppIntegration(unittest.IsolatedAsyncioTestCase):
 
         # Other country code
         self.assertEqual(sanitize_phone_number("+1 (555) 123-4567"), "15551234567")
+
+    async def test_extract_template_body(self):
+        # Plain message should remain untouched
+        msg = "Tomorrow's class will start at 10 AM."
+        self.assertEqual(_extract_template_body(msg), msg)
+
+        # Full template pasted by mistake should have inner message extracted
+        full_paste = (
+            "Hello {{1}}, a message from Inara Yoga.\n\n"
+            "Our December schedule is now live!\n\n"
+            "If you have any questions, simply reply to this message. We look forward to seeing you at the studio."
+        )
+        self.assertEqual(_extract_template_body(full_paste), "Our December schedule is now live!")
 
     async def test_webhook_verification_success(self):
         challenge = "random_challenge_xyz_12345"
